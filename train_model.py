@@ -19,7 +19,7 @@ try:
 except:
     from tensorboardX import SummaryWriter
     
-LR=0.002
+LR=0.01
 EPOCH=100
 BATCH_SIZE=128
 CACHE=False

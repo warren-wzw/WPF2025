@@ -20,6 +20,7 @@ data_path_test=f"./dataset/json_test/test.json"
 MODEL_PATH=f"./output_/output_model/{TYPE}PowerModel.ckpt"
 BATCH_SIZE=32
 TIME_STEP=1
+SITE=10
 
 def CreateDataloader(data_path):
     dataset = OnlineCacheDataset(data_path,shuffle=True)
@@ -51,33 +52,14 @@ def main():
 
     final_predictions = torch.cat(prediction, dim=0)  # (总Batch数 * B, 预测步数, 5)
     final_predictions_np = final_predictions.cpu().numpy()  # 转换为 NumPy 数组，确保使用 cpu()
-    final_predictions_flattened = final_predictions_np.reshape(-1, 5) #5663,5
-    output0 = final_predictions_flattened[:, 0]  # 获取第一列
-    output1 = final_predictions_flattened[:, 1]  # 获取第二列
-    output2 = final_predictions_flattened[:, 2]  # 获取第三列
-    output3 = final_predictions_flattened[:, 3]  # 获取第四列
-    output4 = final_predictions_flattened[:, 4]  # 获取第五列
-    
-    start_time = pd.to_datetime("2025-01-01 00:00:00")
-    time_index = pd.date_range(start=start_time, periods=len(output0), freq='15T')
-    
-    df_output0 = pd.DataFrame({'': time_index, 'power': output0})
-    df_output1 = pd.DataFrame({'': time_index, 'power': output1})
-    df_output2 = pd.DataFrame({'': time_index, 'power': output2})
-    df_output3 = pd.DataFrame({'': time_index, 'power': output3})
-    df_output4 = pd.DataFrame({'': time_index, 'power': output4})
-    if TYPE=="Wind":
-        df_output0.to_csv('./output/output1.csv', index=False)
-        df_output1.to_csv('./output/output2.csv', index=False)
-        df_output2.to_csv('./output/output3.csv', index=False)
-        df_output3.to_csv('./output/output4.csv', index=False)
-        df_output4.to_csv('./output/output5.csv', index=False)
-    elif TYPE=="Light":
-        df_output0.to_csv('./output/output6.csv', index=False)
-        df_output1.to_csv('./output/output7.csv', index=False)
-        df_output2.to_csv('./output/output8.csv', index=False)
-        df_output3.to_csv('./output/output9.csv', index=False)
-        df_output4.to_csv('./output/output10.csv', index=False)
+    final_predictions_flattened = final_predictions_np.reshape(-1, SITE) #5663,5
+    for i in range(SITE):
+        output=final_predictions_flattened[:, i]
+        start_time = pd.to_datetime("2025-01-01 00:00:00")
+        time_index = pd.date_range(start=start_time, periods=len(output), freq='15T')
+        df_output = pd.DataFrame({'': time_index, 'power': output})  
+        df_output.to_csv(f'./output/output{i+1}.csv', index=False)
+        
 
     
 if __name__=="__main__":
