@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
+import math
+import numpy as np
 
 """DSC Usage: DepthwiseSeparableConv(in_channels, out_channels, 3, 1, 1)"""
 class DepthwiseSeparableConv(nn.Module):
@@ -213,82 +215,79 @@ class SEAttention(nn.Module):
         y = self.fc(y).view(b, c, 1, 1)  # 通过全连接层计算通道重要性，调整形状以匹配原始特征图的形状
         return x * y.expand_as(x)  # 将通道重要性系数应用到原始特征图上，进行特征重新校准
 
-# class WindPowerModel(nn.Module):
-#     def __init__(self, site=5, d_model=768, nhead=8, num_layers=6, dim_feedforward=768, dropout=0.1):
-#         super(WindPowerModel, self).__init__()
-#         self.site = site
-#         self.input_proj = nn.Linear(8 * site, d_model)  # 将输入特征转换为 d_model 维度
-        
-#         encoder_layers = nn.TransformerEncoderLayer(
-#             d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout
-#         )
-#         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=num_layers)
-        
-#         self.output_proj = nn.Linear(d_model, site)  # 变换为 site 维度的输出
-
-#     def forward(self, x):
-#         b, _, _ = x.shape  # x: [b, 1, 8*site]
-#         x = x.squeeze(1)  # [b, 8*site]
-#         x = self.input_proj(x)  # [b, d_model]
-#         x = x.unsqueeze(1)  # [b, 1, d_model] (添加序列维度)
-#         x = self.transformer_encoder(x)  # [b, 1, d_model]
-#         x = self.output_proj(x).squeeze(1)  # [b, site]
-#         return x
-
-class WindPowerModel(nn.Module):
-    def __init__(self, site=5, d_model=768, nhead=8, num_layers=6, dim_feedforward=768, dropout=0.1, embed_dim=768):
+class WindPowerModel_(nn.Module):
+    def __init__(self, site=1, d_model=768, nhead=8, num_layers=6, dim_feedforward=768, dropout=0.1):
         super(WindPowerModel, self).__init__()
         self.site = site
+        self.input_proj = nn.Linear(8 * site, d_model)  # 将输入特征转换为 d_model 维度
         
-        # 站点嵌入 (10个站点)
-        self.station_emb = nn.Embedding(10, embed_dim)
-        
-        # 时间嵌入
-        self.month_emb = nn.Embedding(12, embed_dim)
-        self.day_emb = nn.Embedding(31, embed_dim)
-        self.hour_emb = nn.Embedding(24, embed_dim)
-        self.minute_emb = nn.Embedding(60, embed_dim)
-
-        # 输入特征变换
-        self.input_proj = nn.Linear(8 * site, d_model)  # d_model 需要减去时间嵌入部分
-        
-        # Transformer 编码器
-        encoder_layers = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout)
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout
+        )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=num_layers)
         
-        # 输出投影
-        self.output_proj = nn.Linear(d_model, site)  
+        self.output_proj = nn.Linear(d_model, site)  # 变换为 site 维度的输出
+
+    def forward(self, station,month,day,hour,minute,x):
+        b, _, _ = x.shape  # x: [b, 1, 8*site]
+        x = x.squeeze(1)  # [b, 8*site]
+        x = self.input_proj(x)  # [b, d_model]
+        x = x.unsqueeze(1)  # [b, 1, d_model] (添加序列维度)
+        x = self.transformer_encoder(x)  # [b, 1, d_model]
+        x = self.output_proj(x).squeeze(1)  # [b, site]
+        return x
+
+class WindPowerModel(nn.Module):
+    def __init__(self, site=1, d_model=128, nhead=8, num_layers=6, dim_feedforward=1024, dropout=0.1):
+        super(WindPowerModel, self).__init__()
+        
+        self.site = site
+        
+        # 站点嵌入层 (embedding layer for site id)
+        self.site_embedding = nn.Embedding(10, d_model)  # site ID to embedding
+        
+        # 时间特征处理层 (month, day, hour, minute)
+        self.time_proj = nn.Linear(4, d_model)  # 将时间特征映射到 d_model 维度
+        
+        # 输入历史数据转换层 (将每个站点的数据输入转换为 d_model)
+        self.input_proj = nn.Linear(8 * site, d_model)  # 将输入特征转换为 d_model 维度
+        
+        # Transformer 编码器层
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=num_layers)
+        
+        # 输出层 (将 d_model 转换为 site 维度)
+        self.output_proj = nn.Linear(d_model, site)  # 变换为 site 维度的输出
 
     def forward(self, station, month, day, hour, minute, x):
-        """
-        station: [batch] (站点索引，0~9)
-        month: [batch] (1~12)
-        day: [batch] (1~31)
-        hour: [batch] (0~23)
-        minute: [batch] (0~59)
-        x: [batch, 1, 8*site] (输入特征)
-        """
-        b, _, _ = x.shape
-        x = x.squeeze(1)  # [batch, 8*site]
-        
-        # 获取时间嵌入
-        station_emb = self.station_emb(station)  # [batch, embed_dim]
-        month_emb = self.month_emb(month - 1)    # [batch, embed_dim]  (减1使索引从0开始)
-        day_emb = self.day_emb(day - 1)          # [batch, embed_dim]
-        hour_emb = self.hour_emb(hour)           # [batch, embed_dim]
-        minute_emb = self.minute_emb(minute)     # [batch, embed_dim]
+        # 输入的形状 [b, 1, 8*site]，处理后转换为 [b, d_model]
+        b, _, _ = x.shape  # x: [b, 1, 8*site]
+        x = x.squeeze(1)  # [b, 8*site]
+        x = self.input_proj(x)  # [b, d_model]
+        month = month.float()
+        day = day.float()
+        hour = hour.float()
+        minute = minute.float()
 
-        # 合并嵌入
-        time_features = station_emb
+        # 站点信息嵌入 (embedding for station id)
+        station_emb = self.site_embedding(station).squeeze(1)  # [b, d_model]
         
-        # 变换输入特征
-        x = self.input_proj(x)  
-
-        # 拼接时间嵌入
-        x = x+time_features.squeeze(1)
+        # 时间信息转换 (month, day, hour, minute)
+        time_features = torch.cat([month, day, hour, minute], dim=-1)  # [b, 4]
+        time_features = self.time_proj(time_features)  # [b, d_model]
         
-        # Transformer 处理
-        x = self.transformer_encoder(x)  # [batch, 1, d_model]
-        x = self.output_proj(x).squeeze(1)  # [batch, site]
+        # 将站点嵌入和时间信息合并
+        x = x + station_emb + time_features  #[128,768] [128,1,768] [128,768]
+        
+        # 添加一个序列维度来通过 Transformer 编码
+        x = x.unsqueeze(1)  # [b, 1, d_model] (添加序列维度)
+        
+        # Transformer 编码
+        x = self.transformer_encoder(x)  # [b, 1, d_model]
+        
+        # 输出
+        x = self.output_proj(x).squeeze(1)  # [b, site]
         
         return x

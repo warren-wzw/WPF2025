@@ -15,7 +15,7 @@ from datetime import datetime
 from model.dataset import  CacheDataset,OnlineCacheDataset,PreprocessCacheData
 from model.utils import get_linear_schedule_with_warmup,PrintModelInfo,save_ckpt,CaculateAcc
 DEVICE=torch.device("cuda" if torch.cuda.is_available() else "cpu")
-TYPE="Light"
+TYPE="Light" #Wind Light
 data_path_test=f"./dataset/json_test/test.json"
 MODEL_PATH=f"./output_/output_model/{TYPE}PowerModel.ckpt"
 BATCH_SIZE=32
@@ -33,7 +33,7 @@ def CreateDataloader(data_path):
     return loader
 
 def main():
-    model=WindPowerModel(site=5).to(DEVICE)
+    model=WindPowerModel().to(DEVICE)
     ckpt = torch.load(MODEL_PATH)
     model.load_state_dict(ckpt['model'])
     PrintModelInfo(model)
@@ -44,12 +44,9 @@ def main():
         prediction=[]
         test_iterator = tqdm.tqdm(dataloader_test, initial=0, desc="Iter", disable=False)
         for step, batch in enumerate(test_iterator):
-            label_wind,label_light,timestamp,input_data= tuple(t.to(DEVICE) for t in batch)
-            if TYPE=='Wind':
-                input_data=input_data[:,:,:40]
-            elif TYPE=="Light":
-                input_data=input_data[:,:,40:]
-            step_predict = model(input_data)  
+            label,station,month,day,hour,minute,input_data= tuple(t.to(DEVICE) for t in batch)
+
+            step_predict = model(station,month,day,hour,minute,input_data)  
             prediction.append(step_predict)
 
     final_predictions = torch.cat(prediction, dim=0)  # (总Batch数 * B, 预测步数, 5)

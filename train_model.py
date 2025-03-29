@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from test_model_steps import TIME_STEP
 os.chdir(sys.path[0])
-os.environ["CUDA_VISIBLE_DEVICES"]='0' #'0,1'GPU NUM
+os.environ["CUDA_VISIBLE_DEVICES"]='1' #'0,1'GPU NUM
 from model.model import WindPowerModel
 from torch.utils.data import (DataLoader)
 from datetime import datetime
@@ -19,7 +19,7 @@ try:
 except:
     from tensorboardX import SummaryWriter
     
-LR=0.01
+LR=0.002
 EPOCH=100
 BATCH_SIZE=128
 CACHE=False
@@ -71,7 +71,7 @@ def weights_init(m):
 def main():
     global_step=0
     """Define Model"""
-    model=WindPowerModel(site=1).to(DEVICE)
+    model=WindPowerModel().to(DEVICE)
     model.apply(weights_init)
     model_name=model.__class__.__name__
     PrintModelInfo(model)
@@ -81,8 +81,8 @@ def main():
     """Loss function"""
     criterion = nn.MSELoss()
     """Optimizer"""
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
-    #optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.9, weight_decay=1e-4)
+    #optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR, momentum=0.9, weight_decay=1e-4)
     """ Train! """
     scheduler = get_linear_schedule_with_warmup(optimizer, 0.1 * total_steps , total_steps)
     tb_writer = SummaryWriter(log_dir='./output_/tflog/') 
@@ -104,7 +104,8 @@ def main():
         for step, batch in enumerate(train_iterator):
             label,station,month,day,hour,minute,input_data= tuple(t.to(DEVICE) for t in batch)
             optimizer.zero_grad()
-            output=model(station,month,day,hour,minute,input_data)  #input[b,1,8*site]---[b,site]
+            """station[b,1] month[b,1] day[b,1] hour[b,1] minute[b,1] input[b,1,8*site]---out[b,site]"""
+            output=model(station,month,day,hour,minute,input_data)  
             #accuarcy=CaculateAcc(output,label)
             accuarcy=0
             loss = criterion(output, label)

@@ -167,7 +167,7 @@ class OnlineCacheDataset(Dataset):   #only when json is standard json form,it wi
         self.feature_names = ["ghi", "poai", "sp", "t2m", "tcc", "tp", "u100", "v100"]
         for item in range(len(data)):
             timestamp = datetime.strptime(self.datas[item]["TimeStamp"][0], "%Y-%m-%d %H:%M:%S")
-            for i in range(5):
+            for i in range(10):
                 label.extend([replace_nan_with_zero(self.datas[item][f"power{i}"])])
                 station.extend([i])
                 month.extend([timestamp.month])
